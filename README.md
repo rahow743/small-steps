@@ -2,6 +2,16 @@
 
 A JavaScript micro-win milestone app for psychological readiness, fear during directional changes, gratitude, and reframing. Includes real accounts, persistent records, an administrator dashboard, profiles, data export, and responsive phone layouts.
 
+### Your progress tools
+
+- **Home** brings together your daily check-in, recent wins, progress, and shortcuts to each tool.
+- **Fear thermometer** records a movement or situation, fear from 0 to 10, an optional afterwards rating, and what helped. Save multiple moments in a day.
+- **Ladder map** holds personal goals you can reorder, edit, revisit, and mark complete at your own pace.
+- **Me vs last month** compares the current month to date with the same dates last month. Averages use recorded daily check-ins; missing days are not zeros.
+- **Micro-win journal** saves multiple wins per day with optional gratitude and reframing. Earlier daily check-in wins remain visible in the journal.
+
+Each successful save displays a confirmation popup after the database accepts it, including account changes and edits. Errors remain visible without a success popup. Administrators can also inspect the new records, and account exports include them. Existing accounts and check-ins are preserved when the local app starts with the updated schema.
+
 ### Run on this Windows computer
 
 Double-click `start.cmd` in the parent `CC15` folder. It uses the portable Node.js runtime already downloaded into `.tools`; there is no database service to install. Keep the terminal open while using the app.
@@ -40,13 +50,13 @@ Requires Node.js 24 (the included portable runtime works). From this directory:
 ```text
 node server/local.js                 # Start the zero-dependency local app on all network interfaces
 node scripts/make-admin.mjs         # Promote an existing local member
-node --test tests/api.test.mjs      # Account, persistence, validation, and access-control tests
+node --test tests/api.test.mjs tests/features.test.mjs  # Account, feature, persistence, and access-control tests
 node scripts/browser-qa.mjs         # Headless Edge UI checks, using an isolated QA database
 ```
 
-`PORT` defaults to `3000`, `HOST` defaults to `0.0.0.0`, and `DATABASE_PATH` can select another SQLite file. Browser QA uses Windows Edge by default; set `BROWSER_PATH` for another Chromium executable. It checks signup, saving check-ins and reflections, profile editing, admin records, and layouts at 1440px, 390px, and 320px. Its screenshots and test data stay in ignored `.sites-runtime/`.
+`PORT` defaults to `3000`, `HOST` defaults to `0.0.0.0`, and `DATABASE_PATH` can select another SQLite file. Browser QA uses Windows Edge by default; set `BROWSER_PATH` for another Chromium executable. It checks signup, check-ins, fear ratings, ladder goals, journal entries, monthly comparisons, save popups, profile editing, admin records, and all page layouts at 1440px, 390px, and 320px. Its screenshots and test data stay in ignored `.sites-runtime/`.
 
-The user interface is implemented in **`public/app.js`** and **`public/app.css`**. **`server/api.js`** contains the shared JavaScript API. **`server/local.js`** serves it with Node.js and SQLite. The small `app/` adapter serves the same interface and API through the Sites framework for hosting.
+The user interface is implemented in **`public/app.js`**, **`public/features.js`**, and **`public/app.css`**. **`server/api.js`** and **`server/features.js`** contain the shared JavaScript API. **`server/local.js`** serves it with Node.js and SQLite. The small `app/` adapter serves the same interface and API through the Sites framework for hosting.
 
 ### Hosted version
 

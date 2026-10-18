@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, createHash, scrypt, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
+import { loadFeatures, buildComparison, mutateFeatures } from './features.js';
 
 const deriveKey = promisify(scrypt);
 // Synchronous derivation avoids Worker callback ownership across requests.
@@ -16,6 +17,9 @@ export const MILESTONES = [
   { key: 'seven-days', title: 'Your own pace', description: 'Check in on 7 different days, at your own pace.', icon: 'mountain', target: 7, kind: 'checkins', xp: 100 },
   { key: 'reflection-five', title: 'Room to grow', description: 'Make space for reflection on 5 different days.', icon: 'flower', target: 5, kind: 'reflections', xp: 75 },
   { key: 'fourteen-days', title: 'Small wins, big picture', description: 'Build a record of 14 check-in days.', icon: 'award', target: 14, kind: 'checkins', xp: 150 },
+  { key: 'fear-awareness', title: 'Naming the feeling', description: 'Save your first fear thermometer entry.', icon: 'thermometer', target: 1, kind: 'fear_entries', xp: 25 },
+  { key: 'first-ladder-step', title: 'One step closer', description: 'Complete a step on your own ladder.', icon: 'ladder', target: 1, kind: 'completed_steps', xp: 50 },
+  { key: 'first-journal-win', title: 'A win worth keeping', description: 'Save a small win in your micro-win journal.', icon: 'book', target: 1, kind: 'micro_wins', xp: 25 },
 ];
 class ApiError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const fail = (status, message) => { throw new ApiError(status, message); };
@@ -89,20 +93,22 @@ async function rateLimit(db, email) {
   const attempt = await db.prepare('INSERT INTO auth_attempts (bucket, attempts, resets_at) VALUES (?, 1, ?) ON CONFLICT(bucket) DO UPDATE SET attempts=attempts+1 RETURNING attempts').bind(hash(email), now + 900000).first();
   if (attempt.attempts > 15) fail(429, 'Too many attempts. Please try again in 15 minutes.');
 }
-export function milestoneProgress(checkins, reflections) {
-  return { checkins: checkins.length, gratitude: reflections.filter(x => x.gratitude).length, reframe: reflections.filter(x => x.challenge && x.reframe).length, courage: checkins.filter(x => x.fear > 0 && x.movement !== 'Not practised today' && x.win.trim()).length, reflections: reflections.length };
+export function milestoneProgress(checkins, reflections, features = { micro_wins: [], fear_entries: [], ladder_steps: [] }) {
+  return { checkins: checkins.length, gratitude: reflections.filter(x => x.gratitude).length + features.micro_wins.filter(x => x.gratitude).length, reframe: reflections.filter(x => x.challenge && x.reframe).length + features.micro_wins.filter(x => x.challenge && x.reframe).length, courage: checkins.filter(x => x.fear > 0 && x.movement !== 'Not practised today' && x.win.trim()).length, reflections: new Set([...reflections, ...features.micro_wins].map(x => x.entry_date)).size, fear_entries: features.fear_entries.length, completed_steps: features.ladder_steps.filter(x => x.status === 'complete').length, micro_wins: features.micro_wins.length };
 }
 async function progressData(db, user, award = true) {
   const checkins = (await db.prepare('SELECT * FROM checkins WHERE user_id = ? ORDER BY entry_date DESC').bind(user.id).all()).results;
   const reflections = (await db.prepare('SELECT * FROM reflections WHERE user_id = ? ORDER BY entry_date DESC').bind(user.id).all()).results;
-  const progress = milestoneProgress(checkins, reflections);
+  const features = await loadFeatures(db, user.id);
+  const progress = milestoneProgress(checkins, reflections, features);
   if (award) {
     const eligible = MILESTONES.filter(x => progress[x.kind] >= x.target);
     if (eligible.length) await db.batch(eligible.map(x => db.prepare('INSERT OR IGNORE INTO milestones (user_id, milestone_key, earned_at) VALUES (?, ?, ?)').bind(user.id, x.key, new Date().toISOString())));
   }
   const earned = (await db.prepare('SELECT milestone_key, earned_at FROM milestones WHERE user_id = ?').bind(user.id).all()).results;
   const milestones = MILESTONES.map(x => ({ ...x, progress: Math.min(progress[x.kind], x.target), earned_at: earned.find(row => row.milestone_key === x.key)?.earned_at || null }));
-  return { user: safeUser(user), checkins, reflections, milestones, today: todayIn(user.timezone), xp: milestones.filter(x => x.earned_at).reduce((sum, x) => sum + x.xp, 0) };
+  const today = todayIn(user.timezone);
+  return { user: safeUser(user), checkins, reflections, ...features, comparison: buildComparison(today, { checkins, reflections, ...features }), milestones, today, xp: milestones.filter(x => x.earned_at).reduce((sum, x) => sum + x.xp, 0) };
 }
 
 export async function handleApi(request, db, { network = null, allowAdminSignup = false, debugAuth = false } = {}) {
@@ -153,6 +159,7 @@ export async function handleApi(request, db, { network = null, allowAdminSignup 
     }
     if (path === '/api/me' && method === 'GET') return json({ user: safeUser(user), network });
     if (path === '/api/dashboard' && method === 'GET') return json(await progressData(db, user));
+    if (await mutateFeatures({ request, db, user, path, method, today: todayIn(user.timezone), readBody, field, score, validDate, fail })) return json(await progressData(db, user));
     if (path === '/api/checkins' && method === 'POST') {
       const body = await readBody(request), date = validDate(body.entry_date, user), readiness = score(body.readiness, 'Readiness'), fear = score(body.fear, 'Fear');
       if (!MOVEMENTS.includes(body.movement)) fail(400, 'Choose a movement from the list.');

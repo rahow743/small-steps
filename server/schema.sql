@@ -55,3 +55,47 @@ CREATE TABLE IF NOT EXISTS auth_attempts (
   attempts INTEGER NOT NULL,
   resets_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS fear_entries (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entry_date TEXT NOT NULL,
+  movement TEXT NOT NULL,
+  before_score INTEGER NOT NULL CHECK(before_score BETWEEN 0 AND 10),
+  after_score INTEGER CHECK(after_score BETWEEN 0 AND 10),
+  context TEXT NOT NULL DEFAULT '',
+  support TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS fear_entries_user_date ON fear_entries(user_id, entry_date DESC);
+
+CREATE TABLE IF NOT EXISTS ladder_steps (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  expected_fear INTEGER NOT NULL CHECK(expected_fear BETWEEN 0 AND 10),
+  status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned', 'working', 'complete')),
+  position INTEGER NOT NULL,
+  completed_at TEXT,
+  completed_date TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ladder_steps_user_position ON ladder_steps(user_id, position);
+
+CREATE TABLE IF NOT EXISTS micro_wins (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  entry_date TEXT NOT NULL,
+  win TEXT NOT NULL,
+  category TEXT NOT NULL DEFAULT 'other' CHECK(category IN ('courage', 'movement', 'self_kindness', 'gratitude', 'other')),
+  notes TEXT NOT NULL DEFAULT '',
+  gratitude TEXT NOT NULL DEFAULT '',
+  challenge TEXT NOT NULL DEFAULT '',
+  reframe TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS micro_wins_user_date ON micro_wins(user_id, entry_date DESC);
