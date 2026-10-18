@@ -37,7 +37,7 @@ The phone icon in the desktop header toggles a phone-sized preview. Phone layout
 
 - Local data lives in **`data/small-steps.sqlite`**, with SQLite WAL enabled. Keep `data/` to retain accounts and progress across restarts. The database is excluded from version control and deployment archives. Stop the server before copying the database for a backup.
 - Hosted data uses **Cloudflare D1** and the committed Drizzle migration. Local and hosted databases are separate; records are not automatically synchronized.
-- Passwords use salted PBKDF2-HMAC-SHA256 hashes with 600,000 iterations. Sessions use HttpOnly cookies and hashed, expiring tokens. HTTPS adds the Secure cookie flag. Every private API checks the session and enforces ownership or an administrator role on the server.
+- New passwords use salted scrypt hashes (N=32768, r=8, p=3), an OWASP profile supported by both Node and the hosted runtime. Earlier local PBKDF2 and scrypt hashes are verified and upgraded at login. Sessions use HttpOnly cookies and hashed, expiring tokens. HTTPS adds the Secure cookie flag. Every private API checks the session and enforces ownership or an administrator role on the server.
 - Password updates revoke other sessions. Login attempts are rate-limited. Forms and the server validate scores, dates, and field lengths. Cross-origin writes are rejected.
 - Check-ins and reflections are unique per account and calendar day. Editing a day updates it. The profile's time zone determines the current date.
 - Milestones reward nonconsecutive participation, gratitude, reframing, and reflecting on movement with fear present. They do not recommend attempting a movement. Earned milestones and their points stay earned after setbacks or deleting an entry; repeated edits do not multiply points.
@@ -50,7 +50,7 @@ Requires Node.js 24 (the included portable runtime works). From this directory:
 ```text
 node server/local.js                 # Start the zero-dependency local app on all network interfaces
 node scripts/make-admin.mjs         # Promote an existing local member
-node --test tests/api.test.mjs tests/features.test.mjs  # Account, feature, persistence, and access-control tests
+node --test tests/api.test.mjs tests/features.test.mjs tests/passwords.test.mjs  # Account, feature, persistence, and hosted-auth regression tests
 node scripts/browser-qa.mjs         # Headless Edge UI checks, using an isolated QA database
 ```
 
@@ -60,7 +60,9 @@ The user interface is implemented in **`public/app.js`**, **`public/features.js`
 
 ### Hosted version
 
-The Sites deployment is private and retains its ChatGPT sign-in boundary. Sign in as the site owner if prompted, then create a Small Steps account. The first account on the empty **private hosted site** becomes the app administrator; later accounts are members. Locally, use `make-admin.cmd` instead. Opening the hosted site on a phone does not require keeping your computer on or sharing Wi-Fi.
+The Sites deployment is public: anyone with its URL can open the login/signup page on any network. Visitors use their own Small Steps accounts; personal records and administrator APIs remain protected by app sessions. Local and hosted accounts are separate. Opening the hosted site on a phone does not require keeping your computer on or sharing Wi-Fi.
+
+Public signups create regular members. To create the first hosted administrator, the owner must also be signed in through the Site's **Sign in with ChatGPT** route (`/signin-with-chatgpt?return_to=/`). The runtime setting `SMALL_STEPS_OWNER_EMAIL` must match that verified owner's email. The owner can then sign up for Small Steps and receive the administrator role if none exists, even if members have signed up earlier. This runtime value is configured through Sites and is not included in source. Locally, use `make-admin.cmd` instead.
 
 ---
 

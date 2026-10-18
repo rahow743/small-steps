@@ -24,7 +24,7 @@ describe('Accounts, persistent progress, and authorization', () => {
     assert.equal(first.status,200);alice=first.data.user;aliceCookie=first.cookie;
     assert.equal(alice.role,'user');assert.equal(alice.email,'alice@example.test');assert.ok(!('password_hash' in alice));
     assert.match(first.headers.get('set-cookie'),/HttpOnly/);assert.match(first.headers.get('set-cookie'),/SameSite=Lax/);
-    const stored=db.prepare('SELECT password_hash FROM users WHERE id=?').bind(alice.id).first();assert.match(stored.password_hash,/^pbkdf2-sha256:600000:/);assert.ok(!stored.password_hash.includes(password));
+    const stored=db.prepare('SELECT password_hash FROM users WHERE id=?').bind(alice.id).first();assert.match(stored.password_hash,/^scrypt-v2:32768:8:3:/);assert.ok(!stored.password_hash.includes(password));
     const session=db.prepare('SELECT token_hash FROM sessions WHERE user_id=?').bind(alice.id).first();assert.ok(!aliceCookie.includes(session.token_hash));
     const second=await post('/api/auth/signup',{name:'Bob Sample',email:'bob@example.test',password,timezone:'Asia/Singapore'});bob=second.data.user;bobCookie=second.cookie;assert.equal(bob.role,'user');
   });

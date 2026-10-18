@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
+import { randomBytes } from 'node:crypto';
 import { startServer } from '../server/local.js';
 import { openDatabase } from '../server/database.js';
 
@@ -16,6 +17,8 @@ const server = externalOrigin ? null : startServer({port:0,host:'127.0.0.1',data
 if(server)await once(server,'listening');
 const origin = externalOrigin || `http://127.0.0.1:${server.address().port}`;
 const testEmail=externalOrigin ? `alex-${Date.now()}@qa.example` : 'alex@qa.example';
+const testPassword=externalOrigin ? randomBytes(24).toString('hex') : 'QA account password 42!';
+const updatedPassword=externalOrigin ? randomBytes(24).toString('hex') : 'QA updated password 43!';
 const browser = spawn(edge,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${resolve(qaRun,'profile')}`,'about:blank'],{stdio:['ignore','ignore','pipe'],windowsHide:true});
 let client, sessionId, nextId=0;
 const pending = new Map(), errors = [], results = [];
@@ -71,7 +74,7 @@ try {
   await command('Page.navigate',{url:origin});await waitFor("document.querySelector('#auth-form')");
   await screenshot('login-desktop');
   await evaluate("document.querySelector('[data-auth=signup]').click()");
-  await evaluate(`document.querySelector('[name=name]').value='Alex Morgan';document.querySelector('[name=email]').value=${JSON.stringify(testEmail)};document.querySelector('[name=password]').value='QA account password 42!';document.querySelector('[name=confirm_password]').value='QA account password 42!';document.querySelector('#auth-form').requestSubmit()`);
+  await evaluate(`document.querySelector('[name=name]').value=${JSON.stringify(externalOrigin ? 'Small Steps test account' : 'Alex Morgan')};document.querySelector('[name=email]').value=${JSON.stringify(testEmail)};document.querySelector('[name=password]').value=${JSON.stringify(testPassword)};document.querySelector('[name=confirm_password]').value=${JSON.stringify(testPassword)};document.querySelector('#auth-form').requestSubmit()`);
   await waitFor("document.querySelector('.welcome-banner')");results.push('Signup and authenticated dashboard');
   await confirmSaved('account has been created');
   await navigate('checkin','#checkin-form');
@@ -134,12 +137,12 @@ try {
   if(!externalOrigin){await navigate('admin','.admin-table-card');await evaluate("document.querySelector('.member-button').click()");await waitFor("document.querySelector('.admin-history')");assert.ok((await evaluate("document.querySelector('.admin-history').innerText")).includes('I took a small turn'));assert.ok((await evaluate("document.querySelector('#main-content').textContent")).includes('Pivoting with support'));assert.ok((await evaluate("document.querySelector('#main-content').textContent")).includes('A second little victory'));results.push('Admin can inspect check-ins, fear entries, ladder steps, and journal wins');}
   await navigate('overview','.welcome-banner');await evaluate("document.querySelector('.preview-toggle').click()");await waitFor("document.querySelector('.mobile-preview')");const preview=await evaluate('document.querySelector(".app-frame").getBoundingClientRect().width');assert.ok(preview<=410);await evaluate("document.querySelector('.preview-exit').click()");results.push('Interactive mobile preview toggle');
   await navigate('profile','#profile-form');
-  await evaluate("document.querySelector('#password-form [name=current_password]').value='QA account password 42!';document.querySelector('#password-form [name=new_password]').value='QA updated password 43!';document.querySelector('#password-form [name=confirm_password]').value='QA updated password 43!';document.querySelector('#password-form').requestSubmit()");await confirmSaved('new password');
+  await evaluate(`document.querySelector('#password-form [name=current_password]').value=${JSON.stringify(testPassword)};document.querySelector('#password-form [name=new_password]').value=${JSON.stringify(updatedPassword)};document.querySelector('#password-form [name=confirm_password]').value=${JSON.stringify(updatedPassword)};document.querySelector('#password-form').requestSubmit()`);await confirmSaved('new password');
   await evaluate("document.querySelector('#logout').click()");await waitFor("document.querySelector('#auth-form')");
   // Wrangler's development proxy reloads after watched QA artifacts change.
   // Let that local reload finish before sending the next non-idempotent request.
   if(externalOrigin)await pause(2500);
-  await evaluate(`document.querySelector('[name=email]').value=${JSON.stringify(testEmail)};document.querySelector('[name=password]').value='QA updated password 43!';document.querySelector('#auth-form').requestSubmit()`);
+  await evaluate(`document.querySelector('[name=email]').value=${JSON.stringify(testEmail)};document.querySelector('[name=password]').value=${JSON.stringify(updatedPassword)};document.querySelector('#auth-form').requestSubmit()`);
   await waitFor("document.querySelector('.welcome-banner')");results.push('Sign out and sign back in through the browser');
   assert.deepEqual(errors,[],'Browser must not report JavaScript or CSP errors');
   writeFileSync(resolve(qaRoot,'results.json'),JSON.stringify({passed:results,errors},null,2));

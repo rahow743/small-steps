@@ -1,10 +1,11 @@
-import { randomBytes, randomUUID, createHash, scrypt, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
-import { promisify } from 'node:util';
+import { randomBytes, randomUUID, createHash, scryptSync, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 import { loadFeatures, buildComparison, mutateFeatures } from './features.js';
 
-const deriveKey = promisify(scrypt);
-// Synchronous derivation avoids Worker callback ownership across requests.
-const derivePassword = (password, salt, iterations, length, digest) => pbkdf2Sync(password, salt, iterations, length, digest);
+// OWASP's 32 MiB scrypt profile fits the hosted runtime's memory and KDF limits.
+// Synchronous derivation keeps each operation inside its owning Worker request.
+const SCRYPT_OPTIONS = { N: 32768, r: 8, p: 3, maxmem: 67108864 };
+const PASSWORD_PREFIX = 'scrypt-v2:32768:8:3:';
+const DUMMY_PASSWORD_HASH = PASSWORD_PREFIX + '0'.repeat(32) + ':' + '0'.repeat(128);
 const SESSION_SECONDS = 604800;
 const USER_FIELDS = 'id, name, email, role, goal, recovery_focus, timezone, created_at';
 const MOVEMENTS = ['Not practised today', 'Side step', 'Turn left', 'Turn right', 'Pivot', 'Change direction', 'Other movement'];
@@ -57,18 +58,22 @@ async function readBody(request) {
 }
 export async function passwordHash(password) {
   const salt = randomBytes(16).toString('hex');
-  const key = await derivePassword(password, salt, 600000, 32, 'sha256');
-  return `pbkdf2-sha256:600000:${salt}:${key.toString('hex')}`;
+  const key = scryptSync(password, salt, 64, SCRYPT_OPTIONS);
+  return `${PASSWORD_PREFIX}${salt}:${key.toString('hex')}`;
 }
 async function passwordMatches(password, stored) {
+  if (stored.startsWith(PASSWORD_PREFIX)) {
+    const [, , , , salt, expected] = stored.split(':');
+    return timingSafeEqual(scryptSync(password, salt, 64, SCRYPT_OPTIONS), Buffer.from(expected, 'hex'));
+  }
   if (stored.startsWith('pbkdf2-sha256:')) {
     const [, iterations, salt, expected] = stored.split(':');
-    const actual = await derivePassword(password, salt, Number(iterations), 32, 'sha256');
+    const actual = pbkdf2Sync(password, salt, Number(iterations), 32, 'sha256');
     return timingSafeEqual(actual, Buffer.from(expected, 'hex'));
   }
   // Preserve existing local accounts made with the earlier password format.
   const [, salt, expected] = stored.split(':');
-  const actual = await deriveKey(password, salt, 64, { N: 32768, r: 8, p: 1, maxmem: 67108864 });
+  const actual = scryptSync(password, salt, 64, { N: 32768, r: 8, p: 1, maxmem: 67108864 });
   return timingSafeEqual(actual, Buffer.from(expected, 'hex'));
 }
 function validPassword(password) { if (typeof password !== 'string' || password.length < 10 || password.length > 128) fail(400, 'Use a password between 10 and 128 characters.'); return password; }
@@ -123,7 +128,8 @@ export async function handleApi(request, db, { network = null, allowAdminSignup 
     if (path === '/api/health' && method === 'GET') { await db.prepare('SELECT 1 AS ok').first(); return json({ status: 'ok', database: 'connected' }); }
     if (path === '/api/setup' && method === 'GET') {
       const { count } = await db.prepare('SELECT COUNT(*) AS count FROM users').first();
-      return json({ setupRequired: count === 0, firstAccountIsAdmin: allowAdminSignup && count === 0 });
+      const { count: adminCount } = await db.prepare("SELECT COUNT(*) AS count FROM users WHERE role='admin'").first();
+      return json({ setupRequired: count === 0, firstAccountIsAdmin: allowAdminSignup && adminCount === 0 });
     }
     if (['/api/auth/signup', '/api/auth/login'].includes(path) && method === 'POST') {
       const body = await readBody(request), email = field(body.email, 'Email', 254, true).toLowerCase();
@@ -136,17 +142,17 @@ export async function handleApi(request, db, { network = null, allowAdminSignup 
         const name = field(body.name, 'Name', 80, true), timezone = validTimezone(body.timezone || 'Asia/Singapore'), id = randomUUID();
         const encoded = await passwordHash(password);
         try {
-          await db.prepare("INSERT INTO users (id, name, email, password_hash, role, timezone, created_at) SELECT ?, ?, ?, ?, CASE WHEN ? = 1 AND NOT EXISTS(SELECT 1 FROM users) THEN 'admin' ELSE 'user' END, ?, ?")
+          await db.prepare("INSERT INTO users (id, name, email, password_hash, role, timezone, created_at) SELECT ?, ?, ?, ?, CASE WHEN ? = 1 AND NOT EXISTS(SELECT 1 FROM users WHERE role='admin') THEN 'admin' ELSE 'user' END, ?, ?")
             .bind(id, name, email, encoded, allowAdminSignup ? 1 : 0, timezone, new Date().toISOString()).run();
         } catch (error) { if (/unique|constraint/i.test(String(error))) fail(409, 'An account already uses this email. Try signing in.'); throw error; }
         return await makeSession(db, request, await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first());
       }
       const user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
       trace('account read; verifying password');
-      const matches = await passwordMatches(password, user?.password_hash || 'pbkdf2-sha256:600000:00000000000000000000000000000000:' + '00'.repeat(32));
+      const matches = await passwordMatches(password, user?.password_hash || DUMMY_PASSWORD_HASH);
       trace('password verification complete');
       if (!user || !matches) fail(401, 'The email or password is incorrect.');
-      if (user.password_hash.startsWith('scrypt:')) await db.prepare('UPDATE users SET password_hash=? WHERE id=?').bind(await passwordHash(password), user.id).run();
+      if (!user.password_hash.startsWith(PASSWORD_PREFIX)) await db.prepare('UPDATE users SET password_hash=? WHERE id=?').bind(await passwordHash(password), user.id).run();
       trace('creating session');
       const response = await makeSession(db, request, user);
       trace('session created');
