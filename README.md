@@ -12,6 +12,8 @@ A JavaScript micro-win milestone app for psychological readiness, fear during di
 
 Each successful save displays a confirmation popup after the database accepts it, including account changes and edits. Errors remain visible without a success popup. Administrators can also inspect the new records, and account exports include them. Existing accounts and check-ins are preserved when the local app starts with the updated schema.
 
+Submitting an incomplete form shows a summary and a message beside each missing field, focuses the first field to fix, and preserves your draft. Signup/login, check-ins, reflections, fear entries, ladder goals, micro-wins, profile edits, and password changes share this validation. It also checks email format, password confirmation, whitespace-only required text, and incomplete reframing pairs. Invalid forms do not send save requests, and optional notes can stay blank.
+
 ### Run on this Windows computer
 
 Double-click `start.cmd` in the parent `CC15` folder. It uses the portable Node.js runtime already downloaded into `.tools`; there is no database service to install. Keep the terminal open while using the app.

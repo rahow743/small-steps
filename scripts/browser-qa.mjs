@@ -23,6 +23,7 @@ const browser = spawn(edge,['--headless=new','--disable-gpu','--no-first-run','-
 let client, sessionId, nextId=0;
 const pending = new Map(), errors = [], results = [];
 let expectedValidationFailure=false, validationFailureSeen=false, savedPopups=0;
+let apiWrites=0, validationChecks=0;
 const pause = ms => new Promise(resolve=>setTimeout(resolve,ms));
 async function endpoint() {
   return await new Promise((resolve,reject)=>{
@@ -53,12 +54,22 @@ async function confirmSaved(text) {
   savedPopups++;await evaluate("document.querySelector('#saved-done').click()");
   assert.equal(await evaluate("document.querySelector('#modal').open"),false);
 }
+async function expectInvalidForm(selector, names) {
+  const writesBefore=apiWrites;
+  await evaluate(`document.querySelector(${JSON.stringify(selector)}).requestSubmit()`);
+  await waitFor(`document.querySelector(${JSON.stringify(selector+' .form-error:not([hidden])')})`);
+  const result=await evaluate(`(()=>{const form=document.querySelector(${JSON.stringify(selector)});return {invalid:[...new Set([...form.querySelectorAll('[aria-invalid="true"]')].map(x=>x.name))],focused:document.activeElement.name,described:[...form.querySelectorAll('[aria-invalid="true"]')].every(x=>(x.getAttribute('aria-describedby')||'').split(' ').some(id=>document.getElementById(id)?.textContent)),summary:form.querySelector('.form-error').textContent,popup:document.querySelector('#modal').open,disabled:form.querySelector('[type=submit]').disabled};})()`);
+  assert.deepEqual([...result.invalid].sort(),[...names].sort());assert.equal(result.focused,result.invalid[0]);assert.equal(result.described,true);
+  assert.ok(result.summary.includes('Please check the highlighted fields.'));assert.equal(result.popup,false);assert.equal(result.disabled,false);
+  await pause(80);assert.equal(apiWrites,writesBefore,'Incomplete forms must not send a save request');validationChecks++;
+}
 try {
   client=new WebSocket(await endpoint());await once(client,'open');
   client.addEventListener('message',event=>{
     const message=JSON.parse(event.data);
     if(message.id){const item=pending.get(message.id);if(!item)return;clearTimeout(item.timer);pending.delete(message.id);if(message.error)item.reject(Error(message.error.message));else item.resolve(message.result);}
     if(message.method==='Runtime.exceptionThrown')errors.push(message.params.exceptionDetails.exception?.description || message.params.exceptionDetails.text);
+    if(message.method==='Network.requestWillBeSent'&&message.params.request.url.startsWith(origin+'/api/')&&!['GET','HEAD'].includes(message.params.request.method))apiWrites++;
     if(message.method==='Log.entryAdded'&&message.params.entry.level==='error'){
       const entry=message.params.entry;
       const expectedAnonymousCheck=entry.url?.endsWith('/api/me') && entry.text.includes('401');
@@ -69,24 +80,43 @@ try {
   });
   const target=await command('Target.createTarget',{url:'about:blank'},null);
   const attached=await command('Target.attachToTarget',{targetId:target.targetId,flatten:true},null);sessionId=attached.sessionId;
-  await command('Page.enable');await command('Runtime.enable');await command('Log.enable');
+  await command('Page.enable');await command('Runtime.enable');await command('Log.enable');await command('Network.enable');
   await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
   await command('Page.navigate',{url:origin});await waitFor("document.querySelector('#auth-form')");
   await screenshot('login-desktop');
+  await expectInvalidForm('#auth-form',['email','password']);
+  await command('Emulation.setDeviceMetricsOverride',{width:320,height:844,deviceScaleFactor:1,mobile:true});
+  assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+  await screenshot('validation-mobile');
+  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
   await evaluate("document.querySelector('[data-auth=signup]').click()");
+  await expectInvalidForm('#auth-form',['name','email','password','confirm_password']);
+  await evaluate(`document.querySelector('[name=name]').value='   ';document.querySelector('[name=email]').value='invalid-email';document.querySelector('[name=password]').value='short';document.querySelector('[name=confirm_password]').value='different'`);
+  await expectInvalidForm('#auth-form',['name','email','password','confirm_password']);
+  assert.equal(await evaluate("document.querySelector('[name=email]').value"),'invalid-email');
   await evaluate(`document.querySelector('[name=name]').value=${JSON.stringify(externalOrigin ? 'Small Steps test account' : 'Alex Morgan')};document.querySelector('[name=email]').value=${JSON.stringify(testEmail)};document.querySelector('[name=password]').value=${JSON.stringify(testPassword)};document.querySelector('[name=confirm_password]').value=${JSON.stringify(testPassword)};document.querySelector('#auth-form').requestSubmit()`);
   await waitFor("document.querySelector('.welcome-banner')");results.push('Signup and authenticated dashboard');
   await confirmSaved('account has been created');
   await navigate('checkin','#checkin-form');
+  const checkinDate=await evaluate("document.querySelector('#checkin-date').value");
+  await evaluate("document.querySelector('#checkin-date').value='';document.querySelector('#checkin-date').dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('[name=notes]').value='Keep my unfinished check-in.'");
+  await expectInvalidForm('#checkin-form',['entry_date','mood']);
+  assert.equal(await evaluate("document.querySelector('[name=notes]').value"),'Keep my unfinished check-in.');
+  await evaluate(`document.querySelector('#checkin-date').value=${JSON.stringify(checkinDate)}`);
   await evaluate(`document.querySelector('[name=mood][value=hopeful]').checked=true;document.querySelector('[name=readiness]').value='7';document.querySelector('[name=fear]').value='3';document.querySelector('[name=movement]').value='Turn left';document.querySelector('[name=win]').value='I took a small turn with a little more trust in myself.';document.querySelector('#checkin-form').requestSubmit()`);
   await waitFor("document.querySelector('.welcome-banner')");
   await confirmSaved('check-in is saved');
   let data=await evaluate("fetch('/api/dashboard').then(r=>r.json())");assert.equal(data.checkins.length,1);assert.equal(data.checkins[0].readiness,7);results.push('Check-in form persists movement, fear, mood, and a win');
   await navigate('journal','#journal-form');
+  await expectInvalidForm('#journal-form',['gratitude']);
   await evaluate(`document.querySelector('[name=gratitude]').value='An encouraging conversation and a quiet morning.';document.querySelector('[name=challenge]').value='I worried that a slower day meant falling behind.';document.querySelector('[name=reframe]').value='Listening to myself is progress too. I can take this at my own pace.';document.querySelector('#journal-form').requestSubmit()`);
   await waitFor("document.querySelector('.reflection-entry')");results.push('Gratitude and reframing saved through the UI');
   await confirmSaved('safely saved');
   await navigate('fear','#fear-form');
+  const fearDate=await evaluate("document.querySelector('#fear-form [name=entry_date]').value");
+  await evaluate("document.querySelector('#fear-form [name=entry_date]').value=''");
+  await expectInvalidForm('#fear-form',['entry_date','movement']);
+  await evaluate(`document.querySelector('#fear-form [name=entry_date]').value=${JSON.stringify(fearDate)}`);
   await evaluate(`document.querySelector('#fear-form [name=movement]').value='Pivoting with support';document.querySelector('#fear-before').value='7';document.querySelector('#fear-before').dispatchEvent(new Event('input'));document.querySelector('#include-after').click();document.querySelector('#fear-after').value='0';document.querySelector('#fear-form [name=context]').value='A moment of uncertainty.';document.querySelector('#fear-form [name=support]').value='I took a pause and noticed what I needed.';document.querySelector('#fear-form').requestSubmit()`);
   await confirmSaved('fear thermometer entry');
   data=await evaluate("fetch('/api/dashboard').then(r=>r.json())");assert.equal(data.fear_entries.length,1);assert.equal(data.fear_entries[0].before_score,7);assert.equal(data.fear_entries[0].after_score,0);
@@ -95,6 +125,8 @@ try {
   await evaluate("document.querySelector('#fear-form [name=support]').value='An updated note about what helped.';document.querySelector('#fear-form').requestSubmit()");await confirmSaved('fear thermometer entry');
   results.push('Fear thermometer saves and edits ratings, including zero, with confirmation popups');
   await navigate('ladder','#ladder-form');
+  await evaluate("document.querySelector('#ladder-form [name=title]').value='   '");
+  await expectInvalidForm('#ladder-form',['title']);
   for(const [title,rating]of [['Make room for a confident pause',2],['Try my agreed direction-change goal',6]]){
     await evaluate(`document.querySelector('#ladder-form [name=title]').value=${JSON.stringify(title)};document.querySelector('#ladder-form [name=expected_fear]').value=${JSON.stringify(String(rating))};document.querySelector('#ladder-form').requestSubmit()`);await confirmSaved('ladder step');
   }
@@ -105,9 +137,12 @@ try {
   await evaluate(`document.querySelector('[data-step-status="${stepId}"]').click()`);await confirmSaved('ladder progress');
   data=await evaluate("fetch('/api/dashboard').then(r=>r.json())");assert.equal(data.ladder_steps[0].status,'complete');results.push('Ladder goals, reordering, and completion persist with save popups');
   await navigate('micro-wins','#micro-win-form');
-  expectedValidationFailure=true;
+  await expectInvalidForm('#micro-win-form',['win']);
   await evaluate("document.querySelector('#micro-win-form [name=win]').value='I gave a difficult thought some space.';document.querySelector('#micro-win-form [name=challenge]').value='I felt behind.';document.querySelector('#micro-win-form').requestSubmit()");
-  await waitFor("document.querySelector('#micro-win-form .form-error:not([hidden])')");
+  await expectInvalidForm('#micro-win-form',['reframe']);
+  assert.equal(await evaluate("document.querySelector('#micro-win-form details').open"),true);
+  expectedValidationFailure=true;
+  assert.equal(await evaluate("fetch('/api/micro-wins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({entry_date:document.querySelector('#micro-win-form [name=entry_date]').value,win:'An incomplete thought',challenge:'A difficult thought',reframe:''})}).then(r=>r.status)"),400);
   assert.equal(await evaluate("document.querySelector('#modal').open"),false,'An unsuccessful save must not show a saved popup');
   data=await evaluate("fetch('/api/dashboard').then(r=>r.json())");assert.equal(data.micro_wins.length,0);expectedValidationFailure=false;assert.equal(validationFailureSeen,true);
   await evaluate(`document.querySelector('#micro-win-form [name=reframe]').value='I can give myself time.';document.querySelector('#micro-win-form [name=gratitude]').value='A friend who listened.';document.querySelector('#micro-win-form [name=notes]').value='<img src=x onerror="window.__qaXss=true">';document.querySelector('#micro-win-form').requestSubmit()`);await confirmSaved('micro-win journal entry');
@@ -125,6 +160,10 @@ try {
   await navigate('comparison','.comparison-table');
   data=await evaluate("fetch('/api/dashboard').then(r=>r.json())");assert.ok(data.comparison.previous.checkin_days>=1);assert.ok((await evaluate("document.querySelector('.comparison-table').textContent")).includes('Ladder steps completed'));results.push('Monthly comparison uses saved records across month boundaries');
   await navigate('profile','#profile-form');
+  const profileDraft=await evaluate("({name:document.querySelector('#profile-form [name=name]').value,focus:document.querySelector('#profile-form [name=recovery_focus]').value})");
+  await evaluate("document.querySelector('#profile-form [name=name]').value='';document.querySelector('#profile-form [name=recovery_focus]').value=''");
+  await expectInvalidForm('#profile-form',['name','recovery_focus']);
+  await evaluate(`document.querySelector('#profile-form [name=name]').value=${JSON.stringify(profileDraft.name)};document.querySelector('#profile-form [name=recovery_focus]').value=${JSON.stringify(profileDraft.focus)}`);
   await evaluate(`document.querySelector('#profile-form [name=goal]').value='Feel more confident changing direction.';document.querySelector('#profile-form').requestSubmit()`);
   await confirmSaved('profile changes');results.push('Profile editing and account refresh');
   const routes=[['overview','.welcome-banner'],['fear','#fear-form'],['ladder','#ladder-form'],['comparison','.comparison-table'],['micro-wins','#micro-win-form'],['checkin','#checkin-form'],['journey','.journey-chart'],['journal','#journal-form'],['milestones','.milestones-grid'],['profile','#profile-form'],...(!externalOrigin ? [['admin','.admin-table-card']] : [])];
@@ -137,6 +176,8 @@ try {
   if(!externalOrigin){await navigate('admin','.admin-table-card');await evaluate("document.querySelector('.member-button').click()");await waitFor("document.querySelector('.admin-history')");assert.ok((await evaluate("document.querySelector('.admin-history').innerText")).includes('I took a small turn'));assert.ok((await evaluate("document.querySelector('#main-content').textContent")).includes('Pivoting with support'));assert.ok((await evaluate("document.querySelector('#main-content').textContent")).includes('A second little victory'));results.push('Admin can inspect check-ins, fear entries, ladder steps, and journal wins');}
   await navigate('overview','.welcome-banner');await evaluate("document.querySelector('.preview-toggle').click()");await waitFor("document.querySelector('.mobile-preview')");const preview=await evaluate('document.querySelector(".app-frame").getBoundingClientRect().width');assert.ok(preview<=410);await evaluate("document.querySelector('.preview-exit').click()");results.push('Interactive mobile preview toggle');
   await navigate('profile','#profile-form');
+  await expectInvalidForm('#password-form',['current_password','new_password','confirm_password']);
+  results.push('Missing fields, whitespace-only entries, email format, password matching, and partial reflections show accessible errors without save requests or lost drafts');
   await evaluate(`document.querySelector('#password-form [name=current_password]').value=${JSON.stringify(testPassword)};document.querySelector('#password-form [name=new_password]').value=${JSON.stringify(updatedPassword)};document.querySelector('#password-form [name=confirm_password]').value=${JSON.stringify(updatedPassword)};document.querySelector('#password-form').requestSubmit()`);await confirmSaved('new password');
   await evaluate("document.querySelector('#logout').click()");await waitFor("document.querySelector('#auth-form')");
   // Wrangler's development proxy reloads after watched QA artifacts change.
@@ -146,7 +187,7 @@ try {
   await waitFor("document.querySelector('.welcome-banner')");results.push('Sign out and sign back in through the browser');
   assert.deepEqual(errors,[],'Browser must not report JavaScript or CSP errors');
   writeFileSync(resolve(qaRoot,'results.json'),JSON.stringify({passed:results,errors},null,2));
-  console.log(JSON.stringify({passed:results,savedPopups,screenshots:qaRoot,errors},null,2));
+  console.log(JSON.stringify({passed:results,savedPopups,validationChecks,screenshots:qaRoot,errors},null,2));
 } finally {
   if(client?.readyState===WebSocket.OPEN){try{await command('Browser.close',{},null);}catch{}client.close();}
   if(browser.exitCode===null)browser.kill();

@@ -1,4 +1,5 @@
 import { createFeatureViews } from './features.js';
+import { prepareFormValidation, validateForm } from './validation.js';
 const $ = (selector, root = document) => root.querySelector(selector);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const state = { user: null, data: null, network: [], route: 'overview', authMode: 'login', setup: {}, preview: false, checkinDate: null, reflectionDate: null, period: '30', admin: null, adminDetail: null, adminSearch: '', adminError: '', loading: false, fearEdit: null, ladderEdit: null, winEdit: null, winSearch: '' };
@@ -65,12 +66,14 @@ async function api(path, options = {}) {
 }
 function showFormError(form, message) { const node = $('.form-error', form); node.textContent = message; node.hidden = false; node.focus(); }
 async function submit(form, action) {
+  if (form.dataset.submitting || !validateForm(form)) return;
+  form.dataset.submitting = 'true';
   const submitButton = $('button[type="submit"]', form), oldText = submitButton.innerHTML;
   submitButton.disabled = true; submitButton.textContent = 'Saving…'; $('.form-error', form).hidden = true;
   try { await action(); } catch (error) { showFormError(form, error.message); }
-  finally { submitButton.disabled = false; submitButton.innerHTML = oldText; }
+  finally { delete form.dataset.submitting; submitButton.disabled = false; submitButton.innerHTML = oldText; }
 }
-const formError = () => '<p class="form-error" role="alert" tabindex="-1" hidden></p>';
+const formError = () => '<div class="form-error" role="alert" tabindex="-1" hidden></div>';
 function landscape() {
   return `<svg class="landscape" viewBox="0 0 500 290" fill="none" aria-hidden="true"><circle cx="381" cy="63" r="31" fill="#e9d6a7"/><path d="M0 242C99 106 146 131 226 184 324 246 363 103 500 128V290H0Z" fill="#b6c7a9"/><path d="M0 232c93-31 157 68 259-11 101-79 155-27 241-52v121H0Z" fill="#8da78d"/><path d="M0 277c99-33 138 16 228-11 89-27 153-19 272-33v57H0Z" fill="#5b7d68"/><path d="M117 290c-7-45 166-14 162-69-4-40-79-26-61-59 7-12 20-16 35-18" stroke="#f6f2de" stroke-width="11" stroke-linecap="round"/><circle cx="251" cy="143" r="8" fill="#2e5143" stroke="#f2f4e6" stroke-width="4"/><path d="M422 245v-44m0 22c-23 0-29-19-29-30 21 0 31 9 29 30Zm0-9c0-19 12-27 28-27 0 19-11 27-28 27Z" stroke="#365b46" stroke-width="3"/><path d="m81 85 6 7 6-7m16 13 5 5 5-5" stroke="#7c927a" stroke-width="2" stroke-linecap="round"/></svg>`;
 }
@@ -86,7 +89,7 @@ function renderAuth() {
     state.user = result.user; await loadData(); state.route = 'overview'; location.hash = 'overview'; renderApp();
     if(signup)savedPopup('Your account has been created. Welcome to Small Steps.','Account created');else toast('Good to have you back.');
   }); });
-  bindPasswordToggles();
+  prepareFormValidation(root); bindPasswordToggles();
 }
 function $$(selector, element = document) { return [...element.querySelectorAll(selector)]; }
 function bindPasswordToggles() { $$('[data-toggle-password]').forEach(button => button.addEventListener('click', () => { const input = document.getElementById(button.dataset.togglePassword); const show = input.type === 'password'; input.type = show ? 'text' : 'password'; button.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); })); }
@@ -185,6 +188,7 @@ function adminTable() {
   return `<div class="table-scroll"><table><thead><tr><th>Member</th><th>Check-ins</th><th>Latest readiness</th><th>Latest fear</th><th>Last check-in</th><th><span class="sr-only">View</span></th></tr></thead><tbody>${users.map(user => `<tr><td><button type="button" class="member-button" data-view-user="${user.id}"><span class="avatar">${escape(initials(user.name))}</span><span><strong>${escape(user.name)}${user.role === 'admin' ? '<span class="tiny-admin">ADMIN</span>' : ''}</strong><small>${escape(user.email)}</small></span></button></td><td>${user.checkin_count}</td><td>${user.latest_readiness === null ? '—' : `<span class="score-badge green">${user.latest_readiness}/10</span>`}</td><td>${user.latest_fear === null ? '—' : `<span class="score-badge peach">${user.latest_fear}/10</span>`}</td><td>${user.last_checkin ? dateLabel(user.last_checkin) : 'Not yet'}</td><td><button class="icon-btn" type="button" data-view-user="${user.id}" aria-label="View ${escape(user.name)}">${icon('chevron')}</button></td></tr>`).join('')}</tbody></table></div>`;
 }
 function bindCommon() {
+  prepareFormValidation(root);
   $$('.preview-toggle, .preview-exit').forEach(node => node.addEventListener('click', () => { state.preview = !state.preview; renderApp(); }));
   $$('.phone-help').forEach(node => node.addEventListener('click', phoneHelp));
   $$('[data-edit-checkin]').forEach(node => node.addEventListener('click', () => { state.checkinDate = node.dataset.editCheckin; state.route = 'checkin'; location.hash = 'checkin'; renderApp(); scrollTop(); }));
@@ -200,7 +204,7 @@ async function savedProgress(result, message) {
   savedPopup(earned.length ? `${message} Milestone unlocked: ${earned.map(x=>x.title).join(', ')}!` : message);
 }
 function bindCheckin() {
-  $('#checkin-date').addEventListener('change', event => { state.checkinDate = event.target.value; renderApp(); });
+  $('#checkin-date').addEventListener('change', event => { if (!event.target.value || !event.target.validity.valid) return; state.checkinDate = event.target.value; renderApp(); });
   ['readiness','fear'].forEach(key => $(`#${key}`).addEventListener('input', event => { $(`#${key}-value`).innerHTML = `${event.target.value}<small>/10</small>`; }));
   $('#checkin-form').addEventListener('submit', event => { event.preventDefault(); const form = event.currentTarget; submit(form, async () => {
     const body = Object.fromEntries(new FormData(form)); body.readiness = Number(body.readiness); body.fear = Number(body.fear);
@@ -208,7 +212,7 @@ function bindCheckin() {
   }); });
 }
 function bindJournal() {
-  $('#reflection-date').addEventListener('change', event => { state.reflectionDate = event.target.value; renderApp(); });
+  $('#reflection-date').addEventListener('change', event => { if (!event.target.value || !event.target.validity.valid) return; state.reflectionDate = event.target.value; renderApp(); });
   $('#journal-form').addEventListener('submit', event => { event.preventDefault(); const form = event.currentTarget; submit(form, async () => { await savedProgress(await api('/api/reflections',{method:'POST',body:Object.fromEntries(new FormData(form))}),'A little perspective, safely saved.'); }); });
 }
 function bindProfile() {
@@ -236,7 +240,7 @@ function savedPopup(message, title='Saved successfully') {
 }
 function phoneHelp() {
   const local = ['localhost','127.0.0.1'].includes(location.hostname) || /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(location.hostname);
-  modal(`<span class="modal-symbol">${icon('phone')}</span><h2>A small step, wherever you are.</h2><p>${local ? 'Connect your phone to the same Wi-Fi as this computer, then open one of these addresses in Safari or Chrome.' : 'Open this link on your phone and sign in to your account.'}</p><div class="phone-links">${(local && state.network?.length ? state.network : [location.origin]).map(url=>`<a href="${escape(url)}" target="_blank" rel="noopener">${escape(url)}${icon('arrow')}</a>`).join('')}</div>${local ? '<p class="form-help">Keep the app running on this computer. If Windows asks, allow Node.js on private networks. Guest Wi-Fi or a VPN can block devices from connecting.</p>' : '<p class="form-help">This site is private. Sign in to ChatGPT as the site owner if prompted, then use your Small Steps account.</p>'}<div class="install-tip">${icon('plus')}<p><strong>Keep it close.</strong><br>On iPhone, tap Share → Add to Home Screen.<br>On Android, open the browser menu → Add to Home screen.</p></div>`);
+  modal(`<span class="modal-symbol">${icon('phone')}</span><h2>A small step, wherever you are.</h2><p>${local ? 'Connect your phone to the same Wi-Fi as this computer, then open one of these addresses in Safari or Chrome.' : 'Open this link on your phone and sign in to your account.'}</p><div class="phone-links">${(local && state.network?.length ? state.network : [location.origin]).map(url=>`<a href="${escape(url)}" target="_blank" rel="noopener">${escape(url)}${icon('arrow')}</a>`).join('')}</div>${local ? '<p class="form-help">Keep the app running on this computer. If Windows asks, allow Node.js on private networks. Guest Wi-Fi or a VPN can block devices from connecting.</p>' : '<p class="form-help">Open this link using any Wi-Fi or mobile data, then sign up or log in to your Small Steps account.</p>'}<div class="install-tip">${icon('plus')}<p><strong>Keep it close.</strong><br>On iPhone, tap Share → Add to Home Screen.<br>On Android, open the browser menu → Add to Home screen.</p></div>`);
 }
 function confirmDelete(path) {
   modal(`<span class="modal-symbol">${icon('book')}</span><h2>Remove this entry?</h2><p>This will delete the entry from your account. Any milestones you’ve already earned will stay with you.</p><p class="form-error" id="delete-error" hidden></p><div class="modal-actions"><button type="button" id="cancel-delete" class="btn btn-outline">Keep my entry</button><button type="button" id="confirm-delete" class="btn btn-danger">Delete entry</button></div>`);

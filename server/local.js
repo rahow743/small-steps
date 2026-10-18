@@ -34,7 +34,7 @@ export function startServer({ port = Number(process.env.PORT || 3000), host = pr
         res.end(Buffer.from(await response.arrayBuffer())); return;
       }
       if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405); res.end(); return; }
-      const allowed = new Set(['/app.js', '/features.js', '/app.css', '/icon.svg', '/manifest.webmanifest']);
+      const allowed = new Set(['/app.js', '/features.js', '/validation.js', '/app.css', '/icon.svg', '/manifest.webmanifest']);
       const path = allowed.has(url.pathname) ? resolve(ROOT, 'public', url.pathname.slice(1)) : resolve(ROOT, 'public/index.html');
       const content = await readFile(path);
       res.writeHead(200, { 'Content-Type': TYPES[extname(path)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
