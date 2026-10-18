@@ -64,7 +64,7 @@ The user interface is implemented in **`public/app.js`**, **`public/features.js`
 
 The Sites deployment is public: anyone with its URL can open the login/signup page on any network. Visitors use their own Small Steps accounts; personal records and administrator APIs remain protected by app sessions. Local and hosted accounts are separate. Opening the hosted site on a phone does not require keeping your computer on or sharing Wi-Fi.
 
-Public signups create regular members. To create the first hosted administrator, the owner must also be signed in through the Site's **Sign in with ChatGPT** route (`/signin-with-chatgpt?return_to=/`). The runtime setting `SMALL_STEPS_OWNER_EMAIL` must match that verified owner's email. The owner can then sign up for Small Steps and receive the administrator role if none exists, even if members have signed up earlier. This runtime value is configured through Sites and is not included in source. Locally, use `make-admin.cmd` instead.
+Public signups create regular members. To enable the first hosted administrator, sign out of Small Steps, then verify the owner through the Site's **Sign in with ChatGPT** route (`/signin-with-chatgpt?return_to=/`). The runtime setting `SMALL_STEPS_OWNER_EMAIL` must match that verified owner's email. Sign in to the existing Small Steps account with the same email and its app password; it becomes the administrator if none exists. Owners without an app account can sign up after verification. Earlier member signups do not prevent this setup. The runtime value is configured through Sites and is not included in source. After setup, the owner can access the administrator dashboard with normal app logins. Locally, use `make-admin.cmd` instead.
 
 ---
 

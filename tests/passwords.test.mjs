@@ -8,9 +8,9 @@ import { ownerCanSetupAdmin } from '../server/hosting.js';
 
 const password = 'Test-only password with café 42!';
 const origin = 'https://small-steps.test';
-async function request(db, path, { method = 'GET', body, cookie, options } = {}) {
+async function request(db, path, { method = 'GET', body, cookie, options, headers = {} } = {}) {
   const response = await handleApi(new Request(origin + path, {
-    method, headers: { origin, ...(body ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { cookie } : {}) },
+    method, headers: { origin, ...(body ? { 'Content-Type': 'application/json' } : {}), ...(cookie ? { cookie } : {}), ...headers },
     ...(body ? { body: JSON.stringify(body) } : {}),
   }), db, options);
   return { status: response.status, data: await response.json(), cookie: response.headers.get('set-cookie')?.split(';')[0], headers: response.headers };
@@ -85,6 +85,27 @@ describe('Hosted password compatibility', () => {
       assert.equal((await signup(db, 'owner@example.test', { allowAdminSignup: true })).data.user.role, 'admin');
       assert.equal((await signup(db, 'later@example.test', { allowAdminSignup: true })).data.user.role, 'user');
       assert.equal((await request(db, '/api/setup', { options: { allowAdminSignup: true } })).data.firstAccountIsAdmin, false);
+    } finally { db.close(); }
+  });
+
+  it('enables an existing owner account only after verified owner identity and correct app credentials', async () => {
+    const db = openDatabase(':memory:');
+    try {
+      const ownerEmail = 'owner@example.test', memberEmail = 'member@example.test';
+      await signup(db, ownerEmail); await signup(db, memberEmail);
+      const headers = { 'oai-authenticated-user-id': 'verified-owner-id', 'oai-authenticated-user-email': ownerEmail };
+      const ownerLogin = (email, value = password, options = { allowAdminSignup: true }, identity = headers) => request(db, '/api/auth/login', { method: 'POST', body: { email, password: value }, options, headers: identity });
+      assert.equal((await ownerLogin(ownerEmail, 'An incorrect password')).status, 401);
+      assert.equal((await ownerLogin(ownerEmail, password, { allowAdminSignup: false })).data.user.role, 'user');
+      assert.equal((await ownerLogin(ownerEmail, password, { allowAdminSignup: true }, {})).data.user.role, 'user');
+      assert.equal((await ownerLogin(memberEmail)).data.user.role, 'user');
+      const promoted = await ownerLogin(ownerEmail);
+      assert.equal(promoted.status, 200); assert.equal(promoted.data.user.role, 'admin');
+      assert.equal((await request(db, '/api/admin/users', { cookie: promoted.cookie })).status, 200);
+      assert.equal((await login(db, ownerEmail)).data.user.role, 'admin', 'Later app logins keep the earned account role');
+      const second = await ownerLogin(memberEmail, password, { allowAdminSignup: true }, { ...headers, 'oai-authenticated-user-email': memberEmail });
+      assert.equal(second.data.user.role, 'user', 'An existing administrator prevents another bootstrap');
+      assert.equal((await request(db, '/api/admin/users', { cookie: second.cookie })).status, 403);
     } finally { db.close(); }
   });
 });

@@ -147,12 +147,18 @@ export async function handleApi(request, db, { network = null, allowAdminSignup 
         } catch (error) { if (/unique|constraint/i.test(String(error))) fail(409, 'An account already uses this email. Try signing in.'); throw error; }
         return await makeSession(db, request, await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first());
       }
-      const user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
+      let user = await db.prepare('SELECT * FROM users WHERE email = ?').bind(email).first();
       trace('account read; verifying password');
       const matches = await passwordMatches(password, user?.password_hash || DUMMY_PASSWORD_HASH);
       trace('password verification complete');
       if (!user || !matches) fail(401, 'The email or password is incorrect.');
       if (!user.password_hash.startsWith(PASSWORD_PREFIX)) await db.prepare('UPDATE users SET password_hash=? WHERE id=?').bind(await passwordHash(password), user.id).run();
+      // An existing member can claim the first admin role only after both owner
+      // verification by Sites and a successful login to that same email account.
+      if (allowAdminSignup && user.role !== 'admin' && user.email === request.headers.get('oai-authenticated-user-email')?.toLowerCase()) {
+        await db.prepare("UPDATE users SET role='admin' WHERE id=? AND NOT EXISTS(SELECT 1 FROM users WHERE role='admin')").bind(user.id).run();
+        user = await db.prepare('SELECT * FROM users WHERE id=?').bind(user.id).first();
+      }
       trace('creating session');
       const response = await makeSession(db, request, user);
       trace('session created');
