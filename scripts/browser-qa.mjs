@@ -236,6 +236,16 @@ try {
   assert.ok(!await evaluate("/sample(?:\\s+data)?/i.test(document.querySelector('#main-content').textContent)"),'Fear thermometer must omit sample wording');
   await evaluate("document.querySelector('[data-feature-edit=\"fear-entries\"]').click()");
   assert.ok(!await evaluate("[...document.querySelectorAll('#fear-form input,#fear-form textarea')].some(field=>/sample(?:\\s+data)?/i.test(field.value))"),'Fear edit fields must omit sample wording');
+  await navigate('micro-wins','#micro-win-form');
+  assert.ok(!await evaluate("/sample(?:\\s+data)?/i.test(document.querySelector('#main-content').textContent)"),'Small-win journal must omit sample wording in entries, notes, gratitude, and reframing');
+  await evaluate("document.querySelector('[data-feature-edit=\"micro-wins\"]').click()");
+  assert.ok(!await evaluate("[...document.querySelectorAll('#micro-win-form textarea')].some(field=>/sample(?:\\s+data)?/i.test(field.value))"),'Journal edit fields must omit sample wording');
+  await evaluate("document.querySelector('[data-cancel-feature=win]').click()");
+  await evaluate("document.querySelector('[data-edit-checkin]').click()");
+  assert.ok(!await evaluate("[...document.querySelectorAll('#checkin-form textarea')].some(field=>/sample(?:\\s+data)?/i.test(field.value))"),'Daily check-in wins must also open without sample wording');
+  await navigate('ladder','.recovery-workspace');
+  assert.ok(!await evaluate("/sample(?:\\s+data)?/i.test(document.querySelector('.recent-session-wins').textContent)"),'Small wins beside the ladder must omit sample wording');
+  results.push('Small-win journal, gratitude and reframing, edit fields, daily-check-in wins, and ladder win previews omit sample prefixes');
   await navigate('journey','.fear-months');assert.equal(await evaluate("document.querySelectorAll('.fear-months>div').length"),5);
   const pointColors=await evaluate("[...document.querySelectorAll('.fear-daily-point')].map(point=>({level:point.dataset.fearLevel,color:point.getAttribute('fill')}))");
   assert.deepEqual(pointColors[0],{level:'high',color:'#c74b43'});assert.deepEqual(pointColors.at(-1),{level:'low',color:'#3f8a62'});
