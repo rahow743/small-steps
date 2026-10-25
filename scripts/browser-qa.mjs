@@ -187,6 +187,12 @@ try {
   const sampleData=await evaluate("fetch('/api/dashboard').then(r=>r.json())");
   assert.ok(sampleData.checkins.length>=150);assert.ok(sampleData.fear_entries.length>=140);
   assert.equal(sampleData.checkins.find(row=>row.entry_date===sampleData.today).win,originalWin);
+  const fencingSample=sampleData.checkins.find(row=>row.movement==='En garde');assert.ok(fencingSample);
+  await navigate('checkin','#checkin-form');
+  await evaluate(`document.querySelector('#checkin-date').value=${JSON.stringify(fencingSample.entry_date)};document.querySelector('#checkin-date').dispatchEvent(new Event('change'))`);
+  assert.equal(await evaluate("document.querySelector('[name=movement]').value"),'En garde');
+  assert.ok((await evaluate("document.querySelector('[name=notes]').value")).includes('ACL recovery and fencing.'));
+  await navigate('journey','.fear-progress-chart');
   assert.ok(await evaluate("Boolean(document.querySelector('.sample-history-notice'))"));
   await command('Page.reload');await waitFor("document.querySelector('.fear-progress-chart')");
   assert.ok(await evaluate("document.querySelectorAll('.fear-chart-values tbody tr').length>=150"));

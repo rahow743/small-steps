@@ -9,7 +9,7 @@ const PASSWORD_PREFIX = 'scrypt-v2:32768:8:3:';
 const DUMMY_PASSWORD_HASH = PASSWORD_PREFIX + '0'.repeat(32) + ':' + '0'.repeat(128);
 const SESSION_SECONDS = 604800;
 const USER_FIELDS = 'id, name, email, role, goal, recovery_focus, timezone, created_at';
-const MOVEMENTS = ['Not practised today', 'Side step', 'Turn left', 'Turn right', 'Pivot', 'Change direction', 'Other movement'];
+const MOVEMENTS = ['Not practised today', 'Side step', 'Turn left', 'Turn right', 'Pivot', 'Change direction', 'En garde', 'Advance and retreat', 'Lunge preparation', 'Return-to-fencing reflection', 'Other movement'];
 export const MILESTONES = [
   { key: 'first-step', title: 'The first step', description: 'Make your first check-in. Showing up counts.', icon: 'footprints', target: 1, kind: 'checkins', xp: 25 },
   { key: 'three-days', title: 'Finding your rhythm', description: 'Check in on 3 days. They don’t have to be consecutive.', icon: 'sprout', target: 3, kind: 'checkins', xp: 50 },

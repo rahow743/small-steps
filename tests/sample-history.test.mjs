@@ -1,5 +1,6 @@
 import {describe,it} from 'node:test';
 import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
 import {openDatabase} from '../server/database.js';
 import {handleApi} from '../server/api.js';
 import {generateSampleHistory,importSampleHistory,SAMPLE_LABEL} from '../server/sample-history.js';
@@ -15,6 +16,12 @@ describe('Five-month sample history and fear trend',()=>{
     assert.ok(rows.slice(-60).some((row,index,tail)=>index&&row.fear-tail[index-1].fear>=2));
     assert.ok(rows.every(row=>row.fear>=0&&row.fear<=10&&row.readiness>=0&&row.readiness<=10&&row.notes.startsWith(SAMPLE_LABEL)));
     assert.deepEqual(rows,generateSampleHistory('2026-10-25'));
+    const scores=rows.map(({entry_date,fear,readiness,before_score,after_score,mood,journal})=>({entry_date,fear,readiness,before_score,after_score,mood,journal}));
+    assert.equal(createHash('sha256').update(JSON.stringify(scores)).digest('hex'),'d8427e8735a25c5d55aaa6e622dccd140ccc451e3fef790cd821c711677d8b3f','The approved dates and progress must remain exactly the same');
+    assert.ok(rows.every(row=>row.notes.includes('ACL recovery and fencing.')));
+    assert.ok(rows.every(row=>row.context.length<=500&&row.fear_movement.length<=120&&row.win.length<=500));
+    assert.ok(rows.some(row=>row.movement==='En garde'));assert.ok(rows.some(row=>row.movement==='Advance and retreat'));assert.ok(rows.some(row=>row.movement==='Lunge preparation'));
+    assert.ok(rows.filter(row=>row.journal).every(row=>row.gratitude.startsWith('Sample: ')&&row.challenge&&row.reframe));
     assert.equal(fiveMonthsBefore('2026-07-31'),'2026-02-28');assert.equal(fiveMonthsBefore('2024-07-31'),'2024-02-29');
   });
   it('uses daily thermometer averages without double counting check-ins or mixing afterwards scores',()=>{
@@ -47,6 +54,8 @@ describe('Five-month sample history and fear trend',()=>{
       const b=await request('/api/auth/signup',{name:'Other User',email:'other@example.test',password:'Test password 123!'});
       assert.equal((await request('/api/sample-history',{confirm_sample:true})).status,401);
       assert.equal((await request('/api/sample-history',{},a.cookie)).status,400);
+      const fencingCheckin=await request('/api/checkins',{entry_date:'2026-10-01',readiness:6,fear:4,movement:'En garde',mood:'steady',win:'A fencing reflection',notes:'An existing entry'},a.cookie);
+      assert.equal(fencingCheckin.status,200);
       const saved=await request('/api/sample-history',{confirm_sample:true,email:b.data.user.email},a.cookie);
       assert.equal(saved.status,200);assert.equal(saved.data.data.user.email,a.data.user.email);
       assert.equal(db.prepare('SELECT COUNT(*) AS n FROM checkins WHERE user_id=?').bind(b.data.user.id).first().n,0);
