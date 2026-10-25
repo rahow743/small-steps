@@ -247,6 +247,8 @@ try {
   assert.ok(!await evaluate("/sample(?:\\s+data)?/i.test(document.querySelector('.recent-session-wins').textContent)"),'Small wins beside the ladder must omit sample wording');
   results.push('Small-win journal, gratitude and reframing, edit fields, daily-check-in wins, and ladder win previews omit sample prefixes');
   await navigate('journey','.fear-months');assert.equal(await evaluate("document.querySelectorAll('.fear-months>div').length"),5);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.fear-chart-summary>div[data-fear-level]')].map(card=>card.dataset.fearLevel)"),['high','low']);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('.fear-months>div')].map(card=>card.dataset.fearLevel)"),['high','moderate','moderate','moderate','low']);
   const pointColors=await evaluate("[...document.querySelectorAll('.fear-daily-point')].map(point=>({level:point.dataset.fearLevel,color:point.getAttribute('fill')}))");
   assert.deepEqual(pointColors[0],{level:'high',color:'#c74b43'});assert.deepEqual(pointColors.at(-1),{level:'low',color:'#3f8a62'});
   assert.ok(pointColors.some(point=>point.level==='moderate'&&point.color==='#bf8b32'));
