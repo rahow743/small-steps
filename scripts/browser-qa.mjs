@@ -44,7 +44,7 @@ async function evaluate(expression) {
 async function waitFor(expression) {
   const deadline=Date.now()+12000;
   while(Date.now()<deadline){if(await evaluate(`Boolean(${expression})`))return;await pause(100);}
-  throw Error('UI did not become ready: '+expression);
+  throw Error('UI did not become ready: '+expression+'\n'+JSON.stringify({errors,formError:await evaluate("document.querySelector('.form-error:not([hidden])')?.textContent || ''")}));
 }
 async function navigate(route,selector) {await evaluate(`location.hash=${JSON.stringify(route)}`);await waitFor(`document.querySelector(${JSON.stringify(selector)})`);await pause(80);}
 async function screenshot(name) {const result=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});writeFileSync(resolve(qaRoot,name+'.png'),Buffer.from(result.data,'base64'));}
@@ -177,6 +177,34 @@ try {
   await navigate('overview','.welcome-banner');await evaluate("document.querySelector('.preview-toggle').click()");await waitFor("document.querySelector('.mobile-preview')");const preview=await evaluate('document.querySelector(".app-frame").getBoundingClientRect().width');assert.ok(preview<=410);await evaluate("document.querySelector('.preview-exit').click()");results.push('Interactive mobile preview toggle');
   await navigate('profile','#profile-form');
   await expectInvalidForm('#password-form',['current_password','new_password','confirm_password']);
+  const originalWin=await evaluate("fetch('/api/dashboard').then(r=>r.json()).then(data=>data.checkins.find(row=>row.entry_date===data.today).win)");
+  await evaluate("document.querySelector('[data-import-sample=self]').click()");
+  await waitFor("document.querySelector('#confirm-sample-import')");
+  await evaluate("document.querySelector('#confirm-sample-import').click()");
+  await confirmSaved('Five months of sample history');
+  await navigate('journey','.fear-progress-chart');
+  assert.equal(await evaluate("document.querySelector('#chart-period').value"),'5m');
+  const sampleData=await evaluate("fetch('/api/dashboard').then(r=>r.json())");
+  assert.ok(sampleData.checkins.length>=150);assert.ok(sampleData.fear_entries.length>=140);
+  assert.equal(sampleData.checkins.find(row=>row.entry_date===sampleData.today).win,originalWin);
+  assert.ok(await evaluate("Boolean(document.querySelector('.sample-history-notice'))"));
+  await command('Page.reload');await waitFor("document.querySelector('.fear-progress-chart')");
+  assert.ok(await evaluate("document.querySelectorAll('.fear-chart-values tbody tr').length>=150"));
+  await evaluate("document.querySelector('#chart-period').value='30';document.querySelector('#chart-period').dispatchEvent(new Event('change'))");
+  assert.equal(await evaluate("document.querySelectorAll('.fear-chart-values tbody tr').length"),30);
+  await evaluate("document.querySelector('#chart-period').value='5m';document.querySelector('#chart-period').dispatchEvent(new Event('change'))");
+  for(const width of [1440,390,320]){
+    await command('Emulation.setDeviceMetricsOverride',{width,height:width===1440?1100:844,deviceScaleFactor:1,mobile:width<760});
+    assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'The populated graph must fit the viewport');
+    const chartSize=await evaluate('({scroll:document.querySelector(".fear-chart-scroll").scrollWidth,width:document.querySelector(".fear-chart-scroll").clientWidth})');
+    if(width<760)assert.ok(chartSize.scroll>chartSize.width,'Long graphs should scroll inside the card');
+    if(width!==320)await screenshot(width===1440?'fear-progress-desktop':'fear-progress-mobile');
+  }
+  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
+  await navigate('profile','#profile-form');
+  await evaluate("document.querySelector('[data-import-sample=self]').click();document.querySelector('#confirm-sample-import').click()");
+  await confirmSaved('already saved');
+  results.push('Five-month sample history saves once, preserves existing records, survives reload, and draws a responsive fear graph with two-week markers');
   results.push('Missing fields, whitespace-only entries, email format, password matching, and partial reflections show accessible errors without save requests or lost drafts');
   await evaluate(`document.querySelector('#password-form [name=current_password]').value=${JSON.stringify(testPassword)};document.querySelector('#password-form [name=new_password]').value=${JSON.stringify(updatedPassword)};document.querySelector('#password-form [name=confirm_password]').value=${JSON.stringify(updatedPassword)};document.querySelector('#password-form').requestSubmit()`);await confirmSaved('new password');
   await evaluate("document.querySelector('#logout').click()");await waitFor("document.querySelector('#auth-form')");

@@ -37,6 +37,10 @@ The phone icon in the desktop header toggles a phone-sized preview. Phone layout
 
 ### Database and account behavior
 
+The Home and My journey pages include a fear-level line graph, defaulting to the last five calendar months. It plots daily fear ratings on a fixed 0–10 scale, with date markers every 14 days and gaps for unrecorded days. Multiple fear thermometer ratings are averaged per day; daily check-in fear is used on days without thermometer entries. The afterwards rating is kept separate. Scroll across longer graphs on phones, or expand the daily values table.
+
+Under **My profile → Add 5 months of sample history**, signed-in members can populate their own account with labelled, generated history. Administrators can use the same action on a selected member's detail page. The history starts with very intense fear and gradually improves, including occasional harder days and weekly journal entries. Existing recorded days are preserved. Repeating the import for the same date range does not duplicate entries. These are fictional examples, labelled in the entries and a visible page notice.
+
 - Local data lives in **`data/small-steps.sqlite`**, with SQLite WAL enabled. Keep `data/` to retain accounts and progress across restarts. The database is excluded from version control and deployment archives. Stop the server before copying the database for a backup.
 - Hosted data uses **Cloudflare D1** and the committed Drizzle migration. Local and hosted databases are separate; records are not automatically synchronized.
 - New passwords use salted scrypt hashes (N=32768, r=8, p=3), an OWASP profile supported by both Node and the hosted runtime. Earlier local PBKDF2 and scrypt hashes are verified and upgraded at login. Sessions use HttpOnly cookies and hashed, expiring tokens. HTTPS adds the Secure cookie flag. Every private API checks the session and enforces ownership or an administrator role on the server.

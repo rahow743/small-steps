@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID, createHash, scryptSync, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 import { loadFeatures, buildComparison, mutateFeatures } from './features.js';
+import { importSampleHistory } from './sample-history.js';
 
 // OWASP's 32 MiB scrypt profile fits the hosted runtime's memory and KDF limits.
 // Synchronous derivation keeps each operation inside its owning Worker request.
@@ -171,6 +172,13 @@ export async function handleApi(request, db, { network = null, allowAdminSignup 
     }
     if (path === '/api/me' && method === 'GET') return json({ user: safeUser(user), network });
     if (path === '/api/dashboard' && method === 'GET') return json(await progressData(db, user));
+    if (path === '/api/sample-history' && method === 'POST') {
+      const body = await readBody(request);
+      if (body.confirm_sample !== true) fail(400, 'Confirm that you want to add generated sample history.');
+      const through = validDate(body.through || todayIn(user.timezone), user);
+      const imported = await importSampleHistory(db, user.email, through);
+      return json({ import: imported, data: await progressData(db, user) });
+    }
     if (await mutateFeatures({ request, db, user, path, method, today: todayIn(user.timezone), readBody, field, score, validDate, fail })) return json(await progressData(db, user));
     if (path === '/api/checkins' && method === 'POST') {
       const body = await readBody(request), date = validDate(body.entry_date, user), readiness = score(body.readiness, 'Readiness'), fear = score(body.fear, 'Fear');
@@ -211,6 +219,16 @@ export async function handleApi(request, db, { network = null, allowAdminSignup 
     if (path === '/api/export' && method === 'GET') return json(await progressData(db, user, false), 200, { 'Content-Disposition': 'attachment; filename="small-steps-data.json"' });
     if (path.startsWith('/api/admin/')) {
       if (user.role !== 'admin') fail(403, 'This page is only available to administrators.');
+      const sampleTarget = /^\/api\/admin\/users\/([a-f0-9-]{36})\/sample-history$/.exec(path);
+      if (sampleTarget && method === 'POST') {
+        const target = await db.prepare('SELECT * FROM users WHERE id=?').bind(sampleTarget[1]).first();
+        if (!target) fail(404, 'This account wasn’t found.');
+        const body = await readBody(request);
+        if (body.confirm_sample !== true) fail(400, 'Confirm that you want to add generated sample history.');
+        const through = validDate(body.through || todayIn(target.timezone), target);
+        const imported = await importSampleHistory(db, target.email, through);
+        return json({ import: imported, data: await progressData(db, target) });
+      }
       if (path === '/api/admin/users' && method === 'GET') {
         const users = (await db.prepare(`SELECT ${USER_FIELDS.split(', ').map(key => 'u.' + key).join(', ')},
           (SELECT COUNT(*) FROM checkins c WHERE c.user_id=u.id) AS checkin_count,
