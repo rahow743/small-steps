@@ -232,7 +232,17 @@ try {
     if(width===1440){assert.ok(await evaluate('document.querySelector("#micro-win-form").getBoundingClientRect().left<document.querySelector("#ladder-form").getBoundingClientRect().left'),'Small-win log must be on the left');await screenshot('nicole-ladder-desktop');await evaluate("document.querySelector('.presentation-ladder').scrollIntoView({block:'start'})");await screenshot('nicole-six-steps-desktop');await evaluate('window.scrollTo(0,0)');}
     if(width===390){assert.ok(await evaluate("document.querySelector('.ladder-pace-banner>div').getBoundingClientRect().width>200"),'The pace reminder must stay readable on a phone');await screenshot('nicole-ladder-mobile');}
   }
+  await navigate('fear','#fear-form');
+  assert.ok(!await evaluate("/sample(?:\\s+data)?/i.test(document.querySelector('#main-content').textContent)"),'Fear thermometer must omit sample wording');
+  await evaluate("document.querySelector('[data-feature-edit=\"fear-entries\"]').click()");
+  assert.ok(!await evaluate("[...document.querySelectorAll('#fear-form input,#fear-form textarea')].some(field=>/sample(?:\\s+data)?/i.test(field.value))"),'Fear edit fields must omit sample wording');
   await navigate('journey','.fear-months');assert.equal(await evaluate("document.querySelectorAll('.fear-months>div').length"),5);
+  const pointColors=await evaluate("[...document.querySelectorAll('.fear-daily-point')].map(point=>({level:point.dataset.fearLevel,color:point.getAttribute('fill')}))");
+  assert.deepEqual(pointColors[0],{level:'high',color:'#c74b43'});assert.deepEqual(pointColors.at(-1),{level:'low',color:'#3f8a62'});
+  assert.ok(pointColors.some(point=>point.level==='moderate'&&point.color==='#bf8b32'));
+  await command('Emulation.setDeviceMetricsOverride',{width:1440,height:1100,deviceScaleFactor:1,mobile:false});
+  await evaluate("document.querySelector('.journey-chart').scrollIntoView({block:'start'})");await screenshot('fear-colour-progress-desktop');
+  results.push('Fear thermometer and edit fields omit sample prefixes; graph points show red high fear, amber moderate fear, and green low fear');
   results.push('Nicole presentation: six fencing steps, Planned/Done actions, small-win log on the left, responsive layout, and fear from 8 to 2 with five monthly averages');
   assert.deepEqual(errors,[],'Browser must not report JavaScript or CSP errors');
   writeFileSync(resolve(qaRoot,'results.json'),JSON.stringify({passed:results,errors},null,2));

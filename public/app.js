@@ -110,6 +110,7 @@ function renderApp() {
   ({ checkin: bindCheckin, journey: bindJourney, journal: bindJournal, profile: bindProfile, admin: bindAdmin, overview: bindOverview })[route]?.();
 }
 function sampleHistoryNotice() {
+  if(state.route==='fear')return '';
   const records = state.route === 'admin' && state.adminDetail ? state.adminDetail : state.data;
   const samples = [...(records.checkins || []), ...(records.fear_entries || [])].some(row => (row.notes || row.context || '').startsWith('Sample data: generated five-month history.'));
   return samples ? '<aside class="sample-history-notice" role="note">'+icon('book')+'<span><strong>Includes sample history.</strong> Generated entries illustrate a possible journey and are labelled in their notes.</span></aside>' : '';

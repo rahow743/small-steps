@@ -4,7 +4,9 @@
 .fear-chart-summary strong{font:36px Georgia,serif;color:#9b6346}
 .fear-chart-summary small{font:12px "Segoe UI",sans-serif;margin-left:3px;color:#687460}
 .fear-summary-arrow{padding:0 10px;color:#89997d}
-.fear-marker-key{display:inline-block;width:9px;height:9px;border-radius:50%;background:#b67b57;box-shadow:0 0 0 2px #f5e9df}
+.fear-marker-key{display:inline-block;width:10px;height:10px;border:2px solid #68786f;border-radius:50%;background:#fff}
+.fear-high-dot{background:#c74b43}.fear-moderate-dot{background:#bf8b32}.fear-low-dot{background:#3f8a62}
+.fear-daily-point{transition:r .12s}.fear-daily-point:hover{r:6px}
 .fear-chart-source,.fear-scroll-hint{font-size:11px;line-height:1.7;color:#687460;margin:12px 0}
 .fear-chart-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;border-radius:6px;scrollbar-width:thin;scrollbar-color:#bdc9b0 #f3f5ef}
 .chart-wrap .fear-progress-chart{display:block;width:auto;min-width:100%;max-width:none;height:278px}
