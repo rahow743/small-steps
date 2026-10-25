@@ -94,9 +94,9 @@ function renderAuth() {
 }
 function $$(selector, element = document) { return [...element.querySelectorAll(selector)]; }
 function bindPasswordToggles() { $$('[data-toggle-password]').forEach(button => button.addEventListener('click', () => { const input = document.getElementById(button.dataset.togglePassword); const show = input.type === 'password'; input.type = show ? 'text' : 'password'; button.setAttribute('aria-label', show ? 'Hide password' : 'Show password'); })); }
-const NAV = [['overview','grid','Home'],['fear','thermometer','Fear thermometer'],['ladder','ladder','Ladder map'],['comparison','compare','Me vs last month'],['micro-wins','book','Micro-win journal'],['checkin','checkcircle','Daily check-in'],['journey','chart','My journey'],['milestones','award','Milestones']];
+const NAV = [['overview','grid','Home'],['fear','thermometer','Fear thermometer'],['ladder','ladder','Fear ladder'],['comparison','compare','Me vs last month'],['micro-wins','book','Micro-win journal'],['checkin','checkcircle','Daily check-in'],['journey','chart','My journey'],['milestones','award','Milestones']];
 const MOBILE_NAV = [['overview','grid','Home'],['fear','thermometer','Fear'],['ladder','ladder','Ladder'],['comparison','compare','Last month'],['micro-wins','book','Journal']];
-const LABELS = { overview:'Home',fear:'Fear thermometer',ladder:'Ladder map',comparison:'Me vs last month','micro-wins':'Micro-win journal',checkin:'Daily check-in',journey:'My journey',journal:'Reflection journal',milestones:'Milestones',profile:'My profile',admin:'Admin dashboard' };
+const LABELS = { overview:'Home',fear:'Fear thermometer',ladder:'Fear ladder',comparison:'Me vs last month','micro-wins':'Micro-win journal',checkin:'Daily check-in',journey:'My journey',journal:'Reflection journal',milestones:'Milestones',profile:'My profile',admin:'Admin dashboard' };
 const features = createFeatureViews({ state, icon, escape, dateLabel, pageHeading, empty, button, formError, api, submit, savedProgress, renderApp, toast, scrollTop });
 function renderApp() {
   if (!state.user || !state.data) return renderAuth();

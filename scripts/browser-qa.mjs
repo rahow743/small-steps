@@ -134,7 +134,6 @@ try {
   await evaluate(`document.querySelector('[data-step-move="${stepId}"][data-direction="-1"]').click()`);await confirmSaved('ladder order');
   data=await evaluate("fetch('/api/dashboard').then(r=>r.json())");assert.equal(data.ladder_steps[0].id,stepId);
   await evaluate(`document.querySelector('[data-step-status="${stepId}"]').click()`);await confirmSaved('ladder progress');
-  await evaluate(`document.querySelector('[data-step-status="${stepId}"]').click()`);await confirmSaved('ladder progress');
   data=await evaluate("fetch('/api/dashboard').then(r=>r.json())");assert.equal(data.ladder_steps[0].status,'complete');results.push('Ladder goals, reordering, and completion persist with save popups');
   await navigate('micro-wins','#micro-win-form');
   await expectInvalidForm('#micro-win-form',['win']);
@@ -219,6 +218,22 @@ try {
   if(externalOrigin)await pause(2500);
   await evaluate(`document.querySelector('[name=email]').value=${JSON.stringify(testEmail)};document.querySelector('[name=password]').value=${JSON.stringify(updatedPassword)};document.querySelector('#auth-form').requestSubmit()`);
   await waitFor("document.querySelector('.welcome-banner')");results.push('Sign out and sign back in through the browser');
+  await evaluate(`fetch('/api/auth/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:'Nicole (sample journey)',email:'nicole-presentation-'+Date.now()+'@qa.example',password:${JSON.stringify(updatedPassword)},timezone:'Asia/Singapore'})}).then(r=>{if(!r.ok)throw Error('Presentation signup failed')})`);
+  const presentation=await evaluate("fetch('/api/sample-history',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm_sample:true})}).then(r=>r.json())");
+  assert.equal(presentation.data.ladder_steps.length,6);assert.equal(presentation.data.checkins.at(-1).fear,8);assert.equal(presentation.data.checkins[0].fear,2);
+  await command('Page.reload');await waitFor("document.querySelector('.welcome-banner')");
+  await navigate('ladder','.recovery-workspace');
+  assert.equal(await evaluate("document.querySelectorAll('.presentation-ladder .ladder-step').length"),6);
+  assert.deepEqual(await evaluate("[...document.querySelectorAll('#ladder-form [name=status] option')].map(option=>option.textContent)"),['Planned','Done']);
+  await evaluate("document.querySelector('#micro-win-form [name=win]').value='I asked my fencing coach for a pause.';document.querySelector('#micro-win-form').requestSubmit()");await confirmSaved('micro-win journal');
+  for(const width of [1440,390,320]){
+    await command('Emulation.setDeviceMetricsOverride',{width,height:width===1440?1200:844,deviceScaleFactor:1,mobile:width<760});
+    assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'Presentation ladder must fit the viewport');
+    if(width===1440){assert.ok(await evaluate('document.querySelector("#micro-win-form").getBoundingClientRect().left<document.querySelector("#ladder-form").getBoundingClientRect().left'),'Small-win log must be on the left');await screenshot('nicole-ladder-desktop');await evaluate("document.querySelector('.presentation-ladder').scrollIntoView({block:'start'})");await screenshot('nicole-six-steps-desktop');await evaluate('window.scrollTo(0,0)');}
+    if(width===390){assert.ok(await evaluate("document.querySelector('.ladder-pace-banner>div').getBoundingClientRect().width>200"),'The pace reminder must stay readable on a phone');await screenshot('nicole-ladder-mobile');}
+  }
+  await navigate('journey','.fear-months');assert.equal(await evaluate("document.querySelectorAll('.fear-months>div').length"),5);
+  results.push('Nicole presentation: six fencing steps, Planned/Done actions, small-win log on the left, responsive layout, and fear from 8 to 2 with five monthly averages');
   assert.deepEqual(errors,[],'Browser must not report JavaScript or CSP errors');
   writeFileSync(resolve(qaRoot,'results.json'),JSON.stringify({passed:results,errors},null,2));
   console.log(JSON.stringify({passed:results,savedPopups,validationChecks,screenshots:qaRoot,errors},null,2));

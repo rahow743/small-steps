@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import '../public/app.css';
 import '../public/fear-chart.css';
+import '../public/recovery-workspace.css';
 export const metadata: Metadata = {
   title: 'Small Steps — Your progress, at your pace',
   description: 'Celebrate every small win. Track psychological readiness, movement confidence, gratitude, and personal milestones.',

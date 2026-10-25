@@ -6,7 +6,7 @@ A JavaScript micro-win milestone app for psychological readiness, fear during di
 
 - **Home** brings together your daily check-in, recent wins, progress, and shortcuts to each tool.
 - **Fear thermometer** records a movement or situation, fear from 0 to 10, an optional afterwards rating, and what helped. Save multiple moments in a day.
-- **Ladder map** holds personal goals you can reorder, edit, revisit, and mark complete at your own pace.
+- **Fear ladder** places the small-win log on the left and the next-step form on the right. Record one thing that went well after a session, then choose what to try, expected fear, and Planned or Done. Reorder steps with the arrows, edit them, or plan a completed step again. The reminder stays visible: you set the order and never have to rush.
 - **Me vs last month** compares the current month to date with the same dates last month. Averages use recorded daily check-ins; missing days are not zeros.
 - **Micro-win journal** saves multiple wins per day with optional gratitude and reframing. Earlier daily check-in wins remain visible in the journal.
 
@@ -38,6 +38,8 @@ The phone icon in the desktop header toggles a phone-sized preview. Phone layout
 ### Database and account behavior
 
 The Home and My journey pages include a fear-level line graph, defaulting to the last five calendar months. It plots daily fear ratings on a fixed 0–10 scale, with date markers every 14 days and gaps for unrecorded days. Multiple fear thermometer ratings are averaged per day; daily check-in fear is used on days without thermometer entries. The afterwards rating is kept separate. Scroll across longer graphs on phones, or expand the daily values table.
+
+The Nicole presentation sample has 154 daily check-ins and fear entries, 22 journal entries, and six fencing-recovery ladder steps (three Done, three Planned). Fear starts at 8 and finishes at 2, with gradually falling monthly averages and occasional higher-fear days. Five dated monthly summaries sit above the graph. Sample refreshes update only labelled records in the signed-in account, preserve record IDs and dates, and keep a member's existing ladder and chosen ordering. An empty presentation ladder receives the six examples once.
 
 Under **My profile → Add 5 months of sample history**, signed-in members can populate their own account with labelled, generated history. Administrators can use the same action on a selected member's detail page. The fictional example follows a fencer rebuilding confidence after an ACL injury, with en garde, advance-and-retreat, lunge preparation, rest days, reinjury worries, and support from a coach and physiotherapist. The history starts with very intense fear and gradually improves, including occasional harder days and weekly journal entries. The dates describe a journal period, not time since injury or a schedule for returning to sport. Existing recorded days are preserved. Repeating the import for the same date range does not duplicate entries. These are fictional examples, labelled in the entries and a visible page notice.
 

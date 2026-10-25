@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { fiveMonthsBefore } from '../public/fear-chart.js';
+import { fiveMonthsBefore, fiveMonthWindows } from '../public/fear-chart.js';
 import { fencingStory } from './fencing-story.js';
 
 export const SAMPLE_LABEL = 'Sample data: generated five-month history.';
@@ -13,13 +13,19 @@ const stableId = (userId, kind, date) => {
 export function generateSampleHistory(through) {
   const start = fiveMonthsBefore(through), first = Date.parse(start), last = Date.parse(through);
   const length = Math.round((last - first) / DAY);
+  const windows=fiveMonthWindows(through);
+  const anchors=[8,7,5.5,4,2.8,2];
   return Array.from({ length: length + 1 }, (_, index) => {
     const date = new Date(first + index * DAY).toISOString().slice(0,10);
     const t = index / length;
     const noise = (Number.parseInt(createHash('sha256').update(date).digest('hex').slice(0,4),16) / 65535 - 0.5) * 1.2;
     const harderDay = index % 19 === 11 || index % 31 === 21;
     const harderPatch = index % 37 === 16 || index % 37 === 17;
-    const fear = index < 3 ? 10 : clamp(9.6 - 7.2 * t + Math.sin(index * 0.48) * 0.5 + noise + (harderDay ? 3 : harderPatch ? 1.5 : 0));
+    const month=Math.max(0,windows.findIndex(period=>date>=period.start&&date<=period.end));
+    const monthStart=Date.parse(windows[month].start),monthEnd=month===4?last:Date.parse(windows[month+1].start);
+    const fraction=(first+index*DAY-monthStart)/(monthEnd-monthStart);
+    const baseline=anchors[month]+(anchors[month+1]-anchors[month])*fraction;
+    const fear=index===0?8:index===length?2:clamp(baseline+Math.sin(index*0.48)*0.3+noise*0.6+(harderDay?2.5:harderPatch?1.5:0));
     const readiness = Math.max(1, Math.min(9, clamp(10 - fear + t * 1.2 + noise)));
     const rest = index % 9 === 5;
     const story = fencingStory(index, length, { rest, harder: harderDay || harderPatch });

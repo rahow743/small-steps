@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID, createHash, scryptSync, pbkdf2Sync, timingSafeEqual } from 'node:crypto';
 import { loadFeatures, buildComparison, mutateFeatures } from './features.js';
 import { importSampleHistory } from './sample-history.js';
+import { refreshPresentationHistory, seedPresentationLadder } from './presentation-history.js';
 
 // OWASP's 32 MiB scrypt profile fits the hosted runtime's memory and KDF limits.
 // Synchronous derivation keeps each operation inside its owning Worker request.
@@ -176,7 +177,8 @@ export async function handleApi(request, db, { network = null, allowAdminSignup 
       const body = await readBody(request);
       if (body.confirm_sample !== true) fail(400, 'Confirm that you want to add generated sample history.');
       const through = validDate(body.through || todayIn(user.timezone), user);
-      const imported = await importSampleHistory(db, user.email, through);
+      const imported = body.refresh_existing_samples === true ? await refreshPresentationHistory(db,user,through) : await importSampleHistory(db, user.email, through);
+      if (body.refresh_existing_samples !== true) await seedPresentationLadder(db,user.id,through);
       return json({ import: imported, data: await progressData(db, user) });
     }
     if (await mutateFeatures({ request, db, user, path, method, today: todayIn(user.timezone), readBody, field, score, validDate, fail })) return json(await progressData(db, user));
